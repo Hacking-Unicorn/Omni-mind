@@ -99,13 +99,19 @@ There are three concrete forms the hybrid takes in Omni Mind:
 
 The proposer — an AI with gradient-trained intuition — proposes a program change. The verifier checks it. The gates measure it. It is adopted or rejected. This is the *shape* of the Omni proposer loop as designed — but in Omni the proposer loop is still design-only (a design document, not implemented code). Making it real, and optimizing how the proposer's intuition improves over time, is the next step.
 
+Program search also has to scale with experience, or it stalls. Even a gradient-trained proposer hits exponential blowup when synthesizing deep logic from scratch. The answer is **library compression** (the DreamCoder pattern): periodically mine frequent subtrees across verified memory-programs and refactor them into reusable `std/` or library nodes. Each promotion shortens the AST depth required for future tasks, so the proposer's search budget buys more as the library grows. Omni already does the beginning of this — the reusable `neuron`, `pid_output`, and `classify_score` helpers in the example programs are library nodes in miniature. Making the mining and promotion systematic is what turns a fixed library into one that grows with the system.
+
 ### 6.2 Gradient for perception, programs for reasoning
 
 A gradient-trained model on the accelerator turns raw, fuzzy input — sensor streams, images, messy data — into clean, structured features. Then Omni programs reason over those features, make decisions, and act. The boundary is enforced by the determinism guardrail: accelerator math never feeds a gate or a hash. You get fuzzy perception where you need it, and verified reasoning where it matters, and they never contaminate each other.
 
+The guardrail protects reproducibility, but it does not protect against a wrong perception. If the perception model misclassifies an input, it hands the Omni program a clean-looking wrong feature, and the program deterministically executes the wrong branch. The program is correct — it follows its rules — but the outcome is wrong because the input was wrong. The boundary must therefore carry uncertainty, not just a hard classification. Balanced ternary gives this for free: the perception layer emits a trit, and **0 means "unknown."** When the model is uncertain, it passes 0 across the boundary instead of a confident +1 or −1, and the Omni program branches on it (via `egate` / `if_pos` / `if_neg`) into caution or information-gathering instead of acting on false certainty. Uncertainty is a first-class value in the language, not an afterthought bolted on.
+
 ### 6.3 Programs with tunable parameters
 
 A program defines the architecture — the structure, the features, the logic. Gradient descent (or the proposer loop trying values and keeping the ones that measure better) tunes the parameters — the weights, the thresholds, the biases — inside that fixed, verified structure. The network becomes both learnable *and* verifiable. This is the "gradient into program mix" in its most literal form: gradient fills in the numbers, the program provides the shape.
+
+There is a real gap here that must be stated plainly: **gradient descent cannot flow directly through a discrete Omni program.** Pure Omni executes i64 integer arithmetic, integer division, `egate`, and `if_pos`/`if_neg` branches, whose gradients are zero or undefined everywhere. There is no gradient to follow through an Omni AST. Mode 6.3 therefore needs one of two mechanisms. Either a **differentiable shadow graph** is maintained on the accelerator — a continuous relaxation of the program (straight-through estimators or floating-point relaxations) that is trained by gradient descent and then quantized back into verified i64 constants — or the tuning is **derivative-free proposer search**: the proposer loop tries parameter values, measures the result, and adopts or rejects them, with no gradient at all. The shadow graph is true gradient descent; the proposer search is not, but it is simpler and it already exists in Omni's design. Which one is used should be stated explicitly, not left ambiguous.
 
 ## 7. Why the Hybrid Is More Data-Efficient
 
@@ -123,7 +129,7 @@ This architecture is a thesis, not a result. The following are real risks and ga
 
 **Program search is hard.** It is the central technical risk. Searching the space of programs is discrete and combinatorially explosive. The gradient-guided proposer mitigates it, but it does not solve it. If the search does not scale, the approach stalls.
 
-**Consolidation is underspecified.** "A background process distills experiences into programs" does a lot of work in one sentence. How does it decide what is worth keeping? How does it extract a general lesson from a specific experience? That is itself a learning problem, and it is the least specified part of this design.
+**Consolidation is underspecified.** "A background process distills experiences into programs" does a lot of work in one sentence. How does it decide what is worth keeping? How does it extract a general lesson from a specific experience? That is itself a learning problem, and it is the least specified part of this design. The mechanism that makes it tractable is **structural anti-unification scored by Minimum Description Length (MDL)**: take multiple episodic traces (concrete program instances), extract their shared AST skeleton into a parameterized function (anti-unification — the least general generalization of the traces), and promote the new abstraction only when it shrinks the total graph size while passing all historical regression fixtures. That is a mechanical, objective criterion — not open-ended summarization. An abstraction is adopted when it provably compresses the graph, and rejected when it does not.
 
 **Not everything is a program.** Some things — recognizing a face, understanding nuance, perceiving the world — are genuinely statistical and fuzzy. They may always be better learned by gradient descent directly. The hybrid addresses this by keeping gradient descent for perception, but the boundary between "fuzzy perception" and "structured reasoning" is not always clean.
 
@@ -152,6 +158,8 @@ The two pieces that will prove or disprove this thesis fastest are:
 2. **The consolidation process.** A background job that takes an experience and distills it into a verified program, deciding what is worth keeping and what can be discarded.
 
 If those two work, the thesis starts becoming real. If they do not, the approach stalls, and that failure will itself be informative.
+
+Of the three hybrid modes in §6, **Mode 6.3 is tested first.** The topologies already exist and are verified — `mlp.omni`, `perceptron.omni`, and `agent2.omni` are fixed, budget-verified network structures with clamped weights and thresholds. The search space is just the numeric parameters, which is small, and testing it does not require the full proposer loop (which is still design-only). Mode 6.1 is more important long-term — it is the mode that creates new knowledge — but it needs the proposer loop built first. Mode 6.3 validates the "tunable parameters inside a verified shape" idea now, with what already exists.
 
 ---
 
