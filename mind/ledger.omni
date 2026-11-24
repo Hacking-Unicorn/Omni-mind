@@ -1,0 +1,60 @@
+// ==============================================================================
+// LEDGER — Omni-Mind decision ledger: an append-only record of judgments
+// (v0.1 minimal)
+// ==============================================================================
+//
+// The ledger records every judgment the Mind makes (every ADOPT, REJECT,
+// and HOLD) so decisions are auditable: the system can say why it did
+// what it did, and a bad decision can be traced back to the evidence
+// that produced it.
+//
+// Ledger state is a packed i64: count * 10 + (last + 1), where count is
+// the number of decisions recorded and last is the most recent verdict
+// trit (+1 ADOPT, 0 HOLD, -1 REJECT), shifted by +1 into 0..2.
+//
+//   ledger_append(state, decision) -> new state (count + 1, last = decision)
+//   ledger_count(state) -> number of decisions recorded
+//   ledger_last(state)  -> the most recent verdict trit
+//
+// v0.1 is minimal: it tracks the count and the last decision only. The
+// full ledger (content-addressed entries, a hash chain linking each entry
+// to the previous one, and persistence across runs) comes later, once the
+// storage intrinsics (kv_put / db_get) work via `run` and there is a
+// place for the ledger to live. Until then the ledger resets each run,
+// which is honest: it records what happened in this run, and nothing
+// more.
+//
+// Note: this file does not include std/ itself. The including file
+// includes std/math.omni and std/trit.omni first if it needs them.
+// ==============================================================================
+
+#[strict]
+#[cap(AI)]
+#[step_budget(24000)]
+#[mem_budget(8192)]
+fn ledger_append(state: i64, decision: i64) -> i64 {
+    // Append a verdict trit to the ledger. Returns the new state.
+    let count: i64 = state / 10;
+    let d: i64 = std_clamp(decision, -1, 1);
+    return (count + 1) * 10 + (d + 1);
+}
+
+#[strict]
+#[cap(AI)]
+#[step_budget(24000)]
+#[mem_budget(8192)]
+fn ledger_count(state: i64) -> i64 {
+    // Number of decisions recorded in this ledger state.
+    return state / 10;
+}
+
+#[strict]
+#[cap(AI)]
+#[step_budget(24000)]
+#[mem_budget(8192)]
+fn ledger_last(state: i64) -> i64 {
+    // The most recent verdict trit (+1 ADOPT, 0 HOLD, -1 REJECT).
+    // Meaningless when the count is 0 (empty ledger).
+    let rem: i64 = state - (state / 10) * 10;
+    return rem - 1;
+}

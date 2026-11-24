@@ -1,0 +1,37 @@
+// ==============================================================================
+// GOLDEN LEDGER — Omni-Mind v0.1 ledger + distill golden
+// ==============================================================================
+//
+// Distills a memory (stub: identity) and records a verdict in the ledger,
+// returning a packed distilled_id * 100 + ledger_state, where the ledger
+// state is count * 10 + (last + 1).
+//
+//   main(id, decision) -> distilled_id * 100 + ledger_state.
+//
+//   distill(id) is the identity in the v0.1 stub, so distilled_id == id.
+//   ledger_append(0, decision) on an empty ledger gives:
+//     decision +1 -> state 12 (count 1, last +1)
+//     decision  0 -> state 11 (count 1, last 0)
+//     decision -1 -> state 10 (count 1, last -1)
+//
+// Expected (run with: omnic run mind/golden_ledger.omni <id> <decision>):
+//   main(0, 1)  -> 12   (distill 0 -> 0, ledger +1 -> 12)
+//   main(1, -1) -> 110  (distill 1 -> 1, ledger -1 -> 10)
+//   main(2, 0)  -> 211  (distill 2 -> 2, ledger 0 -> 11)
+// ==============================================================================
+
+include "std/math.omni";
+include "std/trit.omni";
+include "distill.omni";
+include "ledger.omni";
+
+#[strict]
+#[cap(AI)]
+#[step_budget(100000)]
+#[mem_budget(8192)]
+fn main(id: i64, decision: i64) -> i64 {
+    // Distill the memory (stub: identity), then record the decision.
+    let d: i64 = distill(id);
+    let state: i64 = ledger_append(0, decision);
+    return d * 100 + state;
+}

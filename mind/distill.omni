@@ -1,0 +1,33 @@
+// ==============================================================================
+// DISTILL — Omni-Mind consolidation: summarize a memory into a general one
+// (v0.1 STUB)
+// ==============================================================================
+//
+// distill(id) takes a memory and returns a more general memory that
+// captures what it has in common with its neighbours, so the graph stays
+// small and the knowledge stays reusable. The full version does this by
+// anti-unification (extract the shared AST skeleton across episodic
+// traces) plus an MDL check (promote only when the distillation shrinks
+// the total graph size while passing all historical regression fixtures).
+//
+// v0.1 is a stub: it returns the memory unchanged. The distillation
+// algorithm (anti-unification + MDL) is a later phase, once the graph is
+// large enough for consolidation to matter and the proposer loop exists
+// to search for shared skeletons.
+//
+//   distill(id) -> id (identity; the memory is unchanged in the stub)
+//
+// Note: this file does not include std/ itself. The including file
+// includes std/math.omni and std/trit.omni first if it needs them.
+// ==============================================================================
+
+#[strict]
+#[cap(AI)]
+#[step_budget(24000)]
+#[mem_budget(8192)]
+fn distill(id: i64) -> i64 {
+    // STUB: return the memory unchanged. Full distillation (anti-unification
+    // + MDL) comes later. The signature is the contract: a distilled
+    // memory id comes back, so callers can already be written against it.
+    return id;
+}

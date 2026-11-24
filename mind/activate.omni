@@ -1,0 +1,43 @@
+// ==============================================================================
+// ACTIVATE — Omni-Mind activation: cue -> best memory -> result + confidence
+// (v0.1)
+// ==============================================================================
+//
+// activate(cue) finds the memory that best matches the cue, runs it, and
+// returns a packed (value + 100) * 10 + (confidence + 1), where confidence
+// is a trit:
+//
+//   +1 = confident (a memory matched the cue and answered)
+//    0 = uncertain (no memory matched; the caller should gather more
+//        information instead of acting on this result)
+//   -1 = contradicts (a memory matched and actively disagreed)
+//
+// In this slice:
+//   cue == 1 (morning) -> memory 0 (greeting), value 42, confidence +1.
+//   cue == 2 (evening) -> memory 1 (farewell), value 99, confidence +1.
+//   any other cue      -> no memory matches, value 0, confidence 0.
+//
+// The 0-confidence case is the important one: it is a first-class outcome,
+// not an error. A caller that receives confidence 0 must not act on the
+// value; it must gather more information (ask, observe, wait) and try again.
+//
+// Note: this file does not include std/ or memory.omni itself. The
+// including file (golden_activate.omni) includes std/math.omni,
+// std/trit.omni, and memory.omni first, in that order.
+// ==============================================================================
+
+#[strict]
+#[cap(AI)]
+#[step_budget(24000)]
+#[mem_budget(8192)]
+fn activate(cue: i64) -> i64 {
+    // Find the memory matching cue and activate it.
+    // Returns packed (value + 100) * 10 + (confidence + 1).
+    let c1: trit = (cue <=> 1);
+    let c2: trit = (cue <=> 2);
+    let a0: i64 = mem_activate(0, cue);
+    let a1: i64 = mem_activate(1, cue);
+    // cue == 2 -> a1. cue == 1 -> a0. Otherwise -> 1001 (value 0, conf 0).
+    let sel1: i64 = std_trit_mux(c2, 1001, a1, 1001);
+    return std_trit_mux(c1, 1001, a0, sel1);
+}

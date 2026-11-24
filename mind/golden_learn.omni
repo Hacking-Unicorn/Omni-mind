@@ -1,0 +1,38 @@
+// ==============================================================================
+// GOLDEN LEARN — Omni-Mind v0.1 learn + HOLD golden
+// ==============================================================================
+//
+// Judges a candidate memory against the evidence for it and returns the
+// verdict trit: +1 ADOPT, -1 REJECT, 0 HOLD.
+//
+//   main(candidate, evidence) -> verdict trit.
+//
+//   evidence >= 2  -> +1 ADOPT.
+//   evidence <= -1 -> -1 REJECT.
+//   evidence 0 or 1 -> 0 HOLD.
+//
+// HOLD is the point of this golden: a candidate with insufficient evidence
+// returns 0 (hold for re-judgment), not a forced ADOPT or REJECT. The
+// system is honest about what it does not know yet.
+//
+// Expected (run with: omnic run mind/golden_learn.omni <candidate> <evidence>):
+//   main(50, 3)  -> 1   (strong evidence, ADOPT)
+//   main(50, 2)  -> 1   (evidence 2, ADOPT)
+//   main(50, 1)  -> 0   (weak evidence, HOLD)
+//   main(50, 0)  -> 0   (no evidence, HOLD)
+//   main(50, -1) -> -1  (contradictory, REJECT)
+//   main(50, -2) -> -1  (REJECT)
+// ==============================================================================
+
+include "std/math.omni";
+include "std/trit.omni";
+include "learn.omni";
+
+#[strict]
+#[cap(AI)]
+#[step_budget(100000)]
+#[mem_budget(8192)]
+fn main(candidate: i64, evidence: i64) -> i64 {
+    // Judge the candidate. Return the verdict trit.
+    return learn(candidate, evidence);
+}

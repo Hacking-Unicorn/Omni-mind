@@ -1,0 +1,45 @@
+// ==============================================================================
+// LEARN — Omni-Mind learning: judge a candidate, return a ternary verdict
+// (v0.1)
+// ==============================================================================
+//
+// learn(candidate, evidence) evaluates a candidate memory (or a proposed
+// change to a memory) against the evidence for it, and returns a verdict
+// trit:
+//
+//   +1 = ADOPT (strong evidence; accept the candidate)
+//   -1 = REJECT (contradictory evidence; refuse the candidate)
+//    0 = HOLD (insufficient evidence; do not decide yet)
+//
+// HOLD is a first-class outcome, not indecision. A held candidate is kept
+// for re-judgment when more evidence arrives; it is never forced into an
+// ADOPT or a REJECT. This is the 0 = unknown made operational: the system
+// is honest about what it does not know yet.
+//
+// Verdict rule (v0.1):
+//   evidence >= 2  -> ADOPT (+1)
+//   evidence <= -1 -> REJECT (-1)
+//   evidence 0 or 1 -> HOLD (0)
+//
+// The candidate is the value being judged. In v0.1 it is not stored
+// (there is no persistence yet), so it is folded into the result as
+// + candidate * 0. Storing adopted candidates is the next phase, once
+// the storage intrinsics (kv_put / db_get) work via `run`.
+//
+// Note: this file does not include std/ itself. The including file
+// (golden_learn.omni) includes std/math.omni and std/trit.omni first.
+// ==============================================================================
+
+#[strict]
+#[cap(AI)]
+#[step_budget(24000)]
+#[mem_budget(8192)]
+fn learn(candidate: i64, evidence: i64) -> i64 {
+    // Judge the candidate. Returns a verdict trit: +1 ADOPT, -1 REJECT, 0 HOLD.
+    let g_hi: trit = egate(evidence - 1);
+    let g_lo: trit = egate(evidence);
+    // g_hi == +1 means evidence >= 2 (ADOPT). g_lo == -1 means evidence <= -1 (REJECT).
+    let rej: i64 = std_trit_mux(g_lo, -1, 0, 0);
+    let verdict: i64 = std_trit_mux(g_hi, rej, rej, 1);
+    return verdict + candidate * 0;
+}
