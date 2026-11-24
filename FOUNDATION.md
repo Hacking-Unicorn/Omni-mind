@@ -20,6 +20,8 @@ Forgetting means distilling a lesson and retiring what is redundant.
 
 **Every judgment in Omni-Mind is a balanced ternary trit.** There are three values, and only three: `+1`, `0`, and `-1`. The `0` is not an error, not a default, and not indecision — it is a first-class value meaning "unknown." A memory can be strong (`+1`), unproven (`0`), or weak (`-1`). An association can support (`+1`), be unknown (`0`), or contradict (`-1`). A perception can be confident (`+1`), uncertain (`0`), or wrong (`-1`). The system never forces a binary choice when it genuinely does not know. That honesty is what makes it trustworthy.
 
+Two decisions about the ternary logic are fixed here so they do not become implicit assumptions. **Logical implication uses Kleene K₃, not Łukasiewicz Ł₃.** In Kleene's three-valued logic, 0 → 0 = 0: unknown implies unknown is unknown. Łukasiewicz defines 0 → 0 = +1, treating unknown-implies-unknown as vacuously true, but that claims knowledge the system does not have. Omni-Mind is honest about what it does not know, so an implication whose premise and conclusion are both unknown stays unknown. **The 0 in Omni-Mind is an uncertain unknown, not a confident prune.** BitNet b1.58 uses 0 as a weight that filters a feature out — a deliberate, confident zero meaning "this does not matter." Omni-Mind's 0 means "we do not know whether this matters." The two are related but not identical, and they must not be conflated when BitNet is cited as validation for the ternary approach. (Source: "Balanced Ternary Computing: Mathematical Foundations, Three-Valued Logic Rules, and Modern Hardware Implementations Beyond Binary," Nov 2026.)
+
 This document defines the minimal foundation required to make that real without breaking Omni's locks.
 
 ---
