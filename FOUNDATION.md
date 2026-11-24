@@ -24,6 +24,8 @@ Two decisions about the ternary logic are fixed here so they do not become impli
 
 The same source's expanded edition records three implementation references worth keeping. **Non-restoring division** (quotient digit by 3-way comparison, zero-skipping, no restoration step) is the reference algorithm if Omni's software division is ever optimized. **5-trit-per-byte packing at 99.06% density** is the documented best practice for compact ternary storage — and it is exactly Omni's pack5. **bitnet.cpp's LUT-indexed inference** (up to 6.46× speedup, 55–82% energy reduction on binary CPUs) is the technique for running Mode 6.3 ternary networks fast on binary hardware.
 
+The complete reference volume (v4) adds three more references worth keeping. **Ternary error-correcting codes:** perfect codes exist over F₃ — ternary Hamming codes correct any single-trit upset, and the perfect Golay code G₁₁ [11,6,5]₃ encodes one 6-trit tryte into 11 trits and corrects 2 errors, meeting the sphere-packing bound exactly. This is the reference if Omni Mind's ternary data ever needs protection in a noisy medium. **Post-quantum cryptography:** NTRU's secret polynomials use coefficients strictly in {−1, 0, +1}, so balanced ternary ALUs are natural accelerators for post-quantum key encapsulation — the first application domain beyond AI and arithmetic where ternary is the natural substrate. **Ternary Shannon expansion:** any ternary function decomposes via 3:1 multiplexers on literal selectors — the formal justification for `std_trit_mux` as the universal ternary primitive.
+
 This document defines the minimal foundation required to make that real without breaking Omni's locks.
 
 ---
