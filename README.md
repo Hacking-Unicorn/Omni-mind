@@ -97,3 +97,7 @@ Omni Mind is built *on* Omni, not part of Omni.
 ## Status
 
 Design only. No code yet. This document is the vision. The first code will be the memory graph and the consolidation process.
+
+## Further reading
+
+- [PAPER.md](PAPER.md) — *Omni Mind: Learning by Construction.* The full design paper: why gradient descent is data-hungry, why memory should be programs, why memory and thought are one layer, and how a hybrid of gradient descent and program synthesis makes learning faster and less data-intensive.
