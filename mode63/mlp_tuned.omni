@@ -1,0 +1,68 @@
+// GENERATED VARIANT — Mode 6.3 tuning candidate (b0=-14, b1=-16, t=-1). Not the mlp.omni on main.
+// ==============================================================================
+// MLP — a neural network forward pass in Pure Omni
+// ==============================================================================
+//
+// A real multi-layer perceptron: three inputs, a hidden layer of two
+// ReLU neurons, and a sign output. This is a neural network running in
+// the language built for AI — the perceptron program was one neuron that
+// learns; this is a network that decides.
+//
+//   main(x0, x1, x2) -> (y + 1) * 200 + (score + 50)
+//
+//   x0, x1, x2 : three sensor readings (temperature, vibration, pressure),
+//                each clamped to [-10, 10].
+//
+//   y     : the classification, +1 = fault, -1 = healthy (0 = borderline).
+//   score : the raw evidence, clamped to [-50, 50] for the packing.
+//           The caller splits the answer with / and %.
+//
+// The network:
+//   h0 = ReLU(x0 + x1 - 8)   // fires when temperature + vibration is high
+//   h1 = ReLU(x1 + x2 - 8)   // fires when vibration + pressure is high
+//   score = h0 + h1 - 5      // combined evidence vs. a threshold
+//   y = sign(score)          // +1 fault, -1 healthy
+//
+// A single sensor being high is not enough to trip it — the evidence
+// has to add up across the two hidden detectors. That is what the hidden
+// layer buys over a single perceptron: it combines weak signals into a
+// decision no single input could make alone.
+//
+// Examples (run with: omnic run mlp.omni <x0> <x1> <x2>):
+//   main(10, 10, 10) -> 469  (all high, fault, score 19)
+//   main(0, 0, 0)    -> 45   (all low, healthy, score -5)
+//   main(10, 0, 0)   -> 47   (one high, not enough, healthy, score -3)
+//   main(5, 5, 5)    -> 49   (middling, healthy, score -1)
+//   main(8, 8, 8)    -> 461  (all elevated, fault, score 11)
+// ==============================================================================
+
+include "std/math.omni";
+include "std/trit.omni";
+
+#[strict]
+#[cap(AI)]
+#[step_budget(24000)]
+#[mem_budget(8192)]
+fn neuron(a: i64, b: i64, bias: i64) -> i64 {
+    // One ReLU neuron: ReLU(a + b + bias). ReLU is imax(0, x).
+    return imax(a + b + bias, 0);
+}
+
+#[strict]
+#[cap(AI)]
+#[step_budget(24000)]
+#[mem_budget(8192)]
+fn main(x0: i64, x1: i64, x2: i64) -> i64 {
+    let a0: i64 = std_clamp(x0, -10, 10);
+    let a1: i64 = std_clamp(x1, -10, 10);
+    let a2: i64 = std_clamp(x2, -10, 10);
+    // Hidden layer: two ReLU detectors.
+    let h0: i64 = neuron(a0, a1, -14);
+    let h1: i64 = neuron(a1, a2, -16);
+    // Output: combined evidence vs. a threshold, then the sign.
+    let score: i64 = h0 + h1 + (-1);
+    let y: trit = egate(score);
+    // Pack the classification and the raw score into one i64.
+    let s: i64 = std_clamp(score, -50, 50);
+    return (y + 1) * 200 + (s + 50);
+}
