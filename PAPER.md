@@ -54,7 +54,7 @@ Instead of storing "Caleb prefers his coffee black" as a text string, the system
 Because a memory is a program:
 
 - It is **executable**. Retrieval is execution, not lookup.
-- It is **verifiable**. The Omni verifier proves it does what it claims and cannot do anything unauthorized. That makes it safe to accumulate memory for decades.
+- It is **verifiable**. The Omni verifier checks that it respects capabilities, taint, ownership, and structure, and that it cannot do anything unauthorized. It does not prove what a program *means* — only that it obeys the rules. That makes it safe to accumulate memory for decades.
 - It is **composable**. Memory-programs call each other and combine. Knowledge grows by composition, not just accumulation.
 - It does not **degrade**. A program behaves the same way in ninety years as it does today.
 
@@ -77,7 +77,7 @@ Omni Mind does not decay the way a human brain does. Memory-programs persist ind
 Forgetting still exists, but it is controlled, and it takes two forms, neither of which loses knowledge:
 
 - **Distillation.** Discard the raw transcript but keep the lesson as a program. You lose the exact words, you keep the fact that Caleb prefers X. That is not forgetting — that is learning.
-- **Garbage collection.** A program is removed only if it is provably unused, superseded by a better one, and nothing depends on it. The verifier guarantees the removal is safe. You do not lose knowledge — you remove redundancy.
+- **Garbage collection.** A program is removed only if it is provably unused, superseded by a better one, and nothing depends on it. The verifier guarantees safety *within* a single program, but there is no dependency analysis across the graph yet, so removal safety across programs is not yet guaranteed. You do not lose knowledge — you remove redundancy.
 
 This is how the agent becomes smarter and more capable than a human brain. A human forgets most of what they learn. This system keeps everything that matters, forever, with perfect precision. Learning something new does not overwrite something old. Recall is exact, not fuzzy. And over twenty years, knowledge only grows. It never shrinks.
 
@@ -97,7 +97,7 @@ There are three concrete forms the hybrid takes in Omni Mind:
 
 ### 6.1 Gradient-guided program search
 
-The proposer — an AI with gradient-trained intuition — proposes a program change. The verifier checks it. The gates measure it. It is adopted or rejected. This is already the shape of the Omni proposer loop. The hybrid is implicit in Omni's design. Making it explicit, and optimizing how the proposer's intuition improves over time, is the next step.
+The proposer — an AI with gradient-trained intuition — proposes a program change. The verifier checks it. The gates measure it. It is adopted or rejected. This is the *shape* of the Omni proposer loop as designed — but in Omni the proposer loop is still design-only (a design document, not implemented code). Making it real, and optimizing how the proposer's intuition improves over time, is the next step.
 
 ### 6.2 Gradient for perception, programs for reasoning
 
@@ -144,7 +144,7 @@ Omni provides the three things that make this architecture possible: **verifiabi
 
 ## 10. Status and Next Steps
 
-This is a design paper. No code for Omni Mind exists yet. The Omni language it builds on is a working system with a verified compiler, a VM, a proposer loop design, and a growing set of example programs.
+This is a design paper. No code for Omni Mind exists yet. The Omni language it builds on is a working system with a compiler extensively checked via differential testing and fixed-point checks (not formally proven — there are no mathematical proofs of correctness, only extensive cross-checks), a VM, a proposer loop design, and a growing set of example programs.
 
 The two pieces that will prove or disprove this thesis fastest are:
 

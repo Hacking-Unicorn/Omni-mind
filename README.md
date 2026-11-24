@@ -40,7 +40,7 @@ They all assume the goal is to preserve information. It is not. The goal is to a
 Each memory is a small, verified Omni program. A preference, a fact, a skill, a lesson — each one is code, not text. Because it is a program:
 
 - It is **executable**. Activating a memory means running it, not retrieving it.
-- It is **verifiable**. The Omni verifier proves it does what it claims and cannot do anything unauthorized. That makes it safe to accumulate memory for decades.
+- It is **verifiable**. The Omni verifier checks that it respects capabilities, taint, ownership, and structure, and that it cannot do anything unauthorized. It does not prove what a program *means* — only that it obeys the rules. That makes it safe to accumulate memory for decades.
 - It is **composable**. Memory-programs call each other and combine. Knowledge grows by composition, not just accumulation.
 - It does not **degrade**. A program behaves the same way in ninety years as it does today.
 
@@ -61,7 +61,7 @@ A background process — the proposer loop, or a dedicated consolidation pass �
 Forgetting is controlled, not passive. It takes two forms, and neither one loses knowledge:
 
 - **Distillation.** Discard the raw transcript but keep the lesson as a program. You lose the exact words, you keep the fact that Caleb prefers X. That is not forgetting — that is learning.
-- **Garbage collection.** A program is removed only if it is provably unused, superseded by a better one, and nothing depends on it. The verifier guarantees the removal is safe. You do not lose knowledge — you remove redundancy.
+- **Garbage collection.** A program is removed only if it is provably unused, superseded by a better one, and nothing depends on it. The verifier guarantees safety *within* a single program, but there is no dependency analysis across the graph yet, so removal safety across programs is not yet guaranteed. You do not lose knowledge — you remove redundancy.
 
 ## Memory and thought are one layer
 
