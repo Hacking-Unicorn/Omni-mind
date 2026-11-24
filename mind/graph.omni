@@ -1,0 +1,81 @@
+// ==============================================================================
+// GRAPH — Omni-Mind memory graph: trit-weighted edges and bounded walk
+// (v0.1 vertical slice)
+// ==============================================================================
+//
+// Memories form a directed graph. Edges are typed relations that carry
+// a ternary weight:
+//
+//   +1 = strong / supporting (follow this edge)
+//    0 = weak / unknown (explore only if fuel allows)
+//   -1 = contradictory / inhibiting (do not follow this edge)
+//
+// In this vertical slice there are two memories (0 and 1) and two edges:
+//
+//   Edge 0 -> 1 : weight +1 (greeting triggers farewell, strong).
+//   Edge 1 -> 0 : weight -1 (farewell contradicts greeting).
+//   All other pairs: weight 0 (no edge / unknown).
+//
+//   edge_weight(from, to) -> trit weight of the edge, or 0 if none.
+//   walk_next(current)    -> next node following a +1 edge, or -1 if none.
+//   walk(start, fuel)     -> final node id after up to fuel steps.
+//
+// The walk is iterative (a while loop), not recursive, so it stays
+// inside the 64-frame call-depth cap. It follows +1 edges only.
+//
+// Note: this file does not include std/ itself. The including file
+// (golden_walk.omni) includes std/math.omni and std/trit.omni first.
+// ==============================================================================
+
+#[strict]
+#[cap(AI)]
+#[step_budget(24000)]
+#[mem_budget(8192)]
+fn edge_weight(from: i64, to: i64) -> i64 {
+    // Weight of the edge from -> to. +1, 0, or -1.
+    let f0: trit = (from <=> 0);
+    let f1: trit = (from <=> 1);
+    let t1: trit = (to <=> 1);
+    let t0: trit = (to <=> 0);
+    // Weight if from == 0: +1 if to == 1, else 0.
+    let w0: i64 = std_trit_mux(t1, 0, 1, 0);
+    // Weight if from == 1: -1 if to == 0, else 0.
+    let w1: i64 = std_trit_mux(t0, 0, -1, 0);
+    // Select w0 if from == 0, w1 if from == 1, else 0.
+    let w_from1: i64 = std_trit_mux(f1, 0, w1, 0);
+    return std_trit_mux(f0, 0, w0, w_from1);
+}
+
+#[strict]
+#[cap(AI)]
+#[step_budget(24000)]
+#[mem_budget(8192)]
+fn walk_next(current: i64) -> i64 {
+    // Next node from current, following a +1 edge. Returns -1 if none.
+    // Checks the two possible targets (0 and 1) and returns the one
+    // whose edge weight is +1. Prefers 1 over 0 on a tie.
+    let w0: i64 = edge_weight(current, 0);
+    let w1: i64 = edge_weight(current, 1);
+    let c1: trit = (w1 <=> 1);
+    let c0: trit = (w0 <=> 1);
+    let next0: i64 = std_trit_mux(c0, -1, 0, -1);
+    return std_trit_mux(c1, -1, 1, next0);
+}
+
+#[strict]
+#[cap(AI)]
+#[step_budget(24000)]
+#[mem_budget(8192)]
+fn walk(start: i64, fuel: i64) -> i64 {
+    // Walks from start for up to fuel steps, following +1 edges.
+    // Returns the final node id. Iterative, not recursive.
+    let cur: i64 = start;
+    let f: i64 = imax(fuel, 0);
+    // Continue while fuel remains AND a +1 edge exists.
+    // f * (walk_next(cur) + 1) is nonzero exactly when both hold.
+    while f * (walk_next(cur) + 1) <=> 0 {
+        cur = walk_next(cur);
+        f = f - 1;
+    }
+    return cur;
+}

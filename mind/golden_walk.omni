@@ -1,0 +1,38 @@
+// ==============================================================================
+// GOLDEN WALK — Omni-Mind v0.1 vertical slice golden
+// ==============================================================================
+//
+// Creates two memories, links them with a trit-weighted edge, walks
+// from one to the other, and activates the final node.
+//
+//   main(start, fuel) -> activated value of the node the walk ends on.
+//
+//   Memory 0 ("greeting") : value 42, confidence +1.
+//   Memory 1 ("farewell") : value 99, confidence +1.
+//   Edge 0 -> 1 : weight +1 (strong). Edge 1 -> 0 : weight -1.
+//
+// Expected (run with: omnic run mind/golden_walk.omni <start> <fuel>):
+//   main(0, 10) -> 99  (walk 0 -> 1 via +1 edge, activate 1)
+//   main(1, 10) -> 99  (no +1 edge from 1, stay at 1, activate 1)
+//   main(0, 0)  -> 42  (fuel 0, stay at 0, activate 0)
+//   main(0, 1)  -> 99  (one step 0 -> 1, activate 1)
+//   main(2, 10) -> 0   (unknown node 2, no edge, activate -> 0, conf 0)
+// ==============================================================================
+
+include "std/math.omni";
+include "std/trit.omni";
+include "memory.omni";
+include "graph.omni";
+
+#[strict]
+#[cap(AI)]
+#[step_budget(100000)]
+#[mem_budget(8192)]
+fn main(start: i64, fuel: i64) -> i64 {
+    // Walk from start, activate the final node, return its value.
+    let node: i64 = walk(start, fuel);
+    let packed: i64 = mem_activate(node, 0);
+    // Unpack: value = (packed / 10) - 100. (Remainder is confidence + 1.)
+    let value: i64 = (packed / 10) - 100;
+    return value;
+}

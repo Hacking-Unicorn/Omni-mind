@@ -1,0 +1,66 @@
+// ==============================================================================
+// MEMORY — Omni-Mind memory record and activation (v0.1 vertical slice)
+// ==============================================================================
+//
+// A memory is a verified Omni program that runs. In this vertical slice,
+// a memory is identified by a small integer id, and activation runs the
+// memory's program with a context and returns a packed result.
+//
+//   mem_activate(id, ctx) -> (value + 100) * 10 + (confidence + 1)
+//
+//   value      : the memory's answer (an i64).
+//   confidence : a trit (+1 = confident, 0 = uncertain, -1 = contradicts).
+//                The caller splits the answer with / and manual remainder.
+//
+//   Memory 0 ("greeting") : value 42, confidence +1.
+//   Memory 1 ("farewell") : value 99, confidence +1.
+//   Unknown id            : value 0,  confidence 0 (unknown).
+//
+//   mem_strength(id) -> trit (+1 = trusted, 0 = unproven, -1 = weak).
+//   Both memories in the slice are trusted (+1). Unknown ids are 0.
+//
+// The ctx argument is accepted for future context-sensitive activation
+// and is not used by the memories in this slice.
+//
+// Note: this file does not include std/ itself. The including file
+// (golden_walk.omni) includes std/math.omni and std/trit.omni first.
+// ==============================================================================
+
+#[strict]
+#[cap(AI)]
+#[step_budget(24000)]
+#[mem_budget(8192)]
+fn mem_strength(id: i64) -> i64 {
+    // Strength trit: +1 = trusted, 0 = unproven, -1 = weak.
+    let c0: trit = (id <=> 0);
+    let c1: trit = (id <=> 1);
+    let pos: i64 = std_trit_mux(c1, 0, 1, 0);
+    return std_trit_mux(c0, 0, 1, pos);
+}
+
+#[strict]
+#[cap(AI)]
+#[step_budget(24000)]
+#[mem_budget(8192)]
+fn mem_value(id: i64) -> i64 {
+    // The memory's answer: 42 for id 0, 99 for id 1, else 0.
+    let c0: trit = (id <=> 0);
+    let c1: trit = (id <=> 1);
+    let v1: i64 = std_trit_mux(c1, 0, 99, 0);
+    return std_trit_mux(c0, 0, 42, v1);
+}
+
+#[strict]
+#[cap(AI)]
+#[step_budget(24000)]
+#[mem_budget(8192)]
+fn mem_activate(id: i64, ctx: i64) -> i64 {
+    // Activate memory id with context ctx.
+    // Returns packed (value + 100) * 10 + (confidence + 1).
+    // ctx is reserved for future context-sensitive activation.
+    // It is folded into the result as + ctx * 0 so the signature is
+    // honest about taking a context while the slice ignores it.
+    let v: i64 = mem_value(id);
+    let c: i64 = mem_strength(id);
+    return (v + 100) * 10 + (c + 1) + ctx * 0;
+}
