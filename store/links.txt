@@ -1,0 +1,16 @@
+# Omni-Mind store edges (Phase 1 prototype)
+#
+# One edge per line: "from to weight".
+#   +1 = strong / supporting (the runner follows this edge)
+#    0 = weak / unknown (no edge / unknown)
+#   -1 = contradictory / inhibiting (the runner does not follow it)
+#
+# These are the v0.1 edges from mind/graph.omni:
+#   Edge 0 -> 1 : weight +1 (greeting triggers farewell, strong).
+#   Edge 1 -> 0 : weight -1 (farewell contradicts greeting).
+#   All other pairs: weight 0 (no edge / unknown).
+#
+# Memory 3 ("persistence proof") is deliberately unlinked: no edges to
+# or from it, so the v0.1 golden_walk cases are unaffected.
+0 1 +1
+1 0 -1

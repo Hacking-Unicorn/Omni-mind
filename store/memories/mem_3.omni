@@ -1,0 +1,29 @@
+// ==============================================================================
+// MEM_3 — Omni-Mind store memory 3 ("persistence proof") (Phase 1 prototype)
+// ==============================================================================
+//
+// This memory was created AFTER the v0.1 foundation to prove persistence:
+// it exists only as a file in store/memories/, not in mind/. A fresh
+// process that has never seen the v0.1 foundation can activate it by
+// running this file. That is the whole point of the store.
+//
+//   Memory 3 ("persistence proof") : value 7, confidence +1 -> 1072.
+//
+// It is deliberately NOT linked into the graph (no edges to or from it in
+// links.txt), so the v0.1 golden_walk cases are unaffected: start 2 is
+// still unknown (-> 0), and walks from 0/1 never reach 3. Activate it
+// directly with: ./run_store.sh 3 0   -> 7.
+//
+// The packed format is the same as mind/memory.omni:
+//   (value + 100) * 10 + (confidence + 1)
+// ctx is reserved and folded in as + ctx * 0, the same convention.
+// ==============================================================================
+
+#[strict]
+#[cap(AI)]
+#[step_budget(24000)]
+#[mem_budget(8192)]
+fn main(ctx: i64) -> i64 {
+    // Memory 3 ("persistence proof"): value 7, confidence +1.
+    return (7 + 100) * 10 + (1 + 1) + ctx * 0;
+}
