@@ -83,6 +83,8 @@ Learning is the only mutation:
 
 The `0t` (hold) verdict is a legitimate third state, not indecision. It means "insufficient evidence to adopt or reject." A held candidate stays in a ternary limbo — it is not adopted, not rejected, and can be re-judged when more evidence arrives. The system does not force a binary adopt/reject when the evidence does not support one.
 
+The structured repair hint emitted on rejection follows the **CEGIS(T) verifier gradient** format: the exact assertion or invariant violated, the minimal failing input witness, the localized span where the execution trace diverged, and ranked repair templates. The verifier never returns a bare pass/fail; it returns the information the proposer needs to fix the candidate. The proposer loop follows **CEGIS** (Counterexample-Guided Inductive Synthesis): each proposal must satisfy all accumulated counterexamples, so each round is monotonically more correct.
+
 ### 2.5 Forgetting / Distillation
 Forgetting is compression, not deletion of knowledge:
 
@@ -91,6 +93,8 @@ Forgetting is compression, not deletion of knowledge:
 - Knowledge is not lost; the lesson remains as the distilled program.
 
 The decision to retire is itself ternary: `+1` = retire (the distilled form is strictly better), `0` = keep both (the distilled form is equivalent but the original has value as a variant or a fallback), `-1` = do not retire (the distilled form is worse). A `distilled-from` edge carries the verdict: it is `+1` when the original is fully superseded, `0` when the original is kept as a variant.
+
+The distillation mechanism is **Stitch** (top-down syntactic anti-unification): given two program ASTs, find their least general generalization by replacing differing subtrees with fresh λ-bound variables. A candidate abstraction is admitted to the library only if it passes two formal gates: it must compress the corpus by at least δ_MDL nats (e.g., 4 nats) **and** preserve 100% verifier soundness across all rewritten programs.
 
 ---
 
@@ -194,7 +198,13 @@ The foundation is real when:
 ## 9. Immediate Next Step
 
 Implement `memory.omni` + `graph.omni` + one golden that creates two memories and walks from one to the other.  
-Nothing else.  
+Nothing else.
+
+## 10. Beyond v0.1 (Recorded Designs)
+
+Three designs are recorded for the steps after the v0.1 foundation. **Persistence** uses a Git-backed content-addressed store: memories as files in a Git repository, SHA-256 content addressing, commit messages for audit trail, branch-per-agent isolation for parallel proposer instances, and sleep-time garbage collection. This is the filesystem-store path (Path B), not host intrinsics. **The audit view** — which must land before the proposer loop starts auto-committing — uses SWUM + AST-W-PDT for deterministic, zero-LLM program summaries (no LLM narration). **Mode 6.3 tuning** uses (1+1)-CMA-ES with Margin, warm-started with 15–20 quasi-random samples (Mixed-Integer Bayesian Optimization only if tests are expensive).
+
+**A standing decision:** build with proven components first, then revisit each with first principles once the system works. The designs above are established techniques, chosen because they are the best available tools for each job. Once the Mode 6.3 + proposer loop system is working end to end, each component is revisited from first principles: a ternary-native optimizer that exploits the ternary structure of the parameter space, a verifier-native synthesis method better suited to a capability verifier than CEGIS (built for SMT solvers), native ternary training without a BF16 master copy, an Omni-native store for memories rather than Git. The first-principles work happens after the system works, not instead of building it. (Source: "Engineering Foundations for Mode 6.3, the Proposer Loop, and Ternary-Native Execution," Nov 2026.)  
 That single vertical slice proves the model can exist inside the current pure pipeline.
 
 The golden should demonstrate ternary edge weights: a walk that follows a `+1` edge to the expected node, refuses to follow a `-1` edge, and treats a `0` edge as "explore if fuel allows."
