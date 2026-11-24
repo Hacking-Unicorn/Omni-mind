@@ -1,8 +1,8 @@
 # Omni Programs — Usability Series
 
-Programs built to test Omni usability while Grok works on the M3 builtins
-fix. All run via `omnic run` on the fix branch (`fix/m3-builtins`,
-binary `~/workspace/omnic-fix`). Run them from the repo root so the
+Programs built to test Omni usability. All run via `omnic run` on `main`
+(the M3 builtins fix is merged; build `omnic` from the repo root with
+`rustc -O omni_rust_bootstrap.rs -o omnic`). Run them from the repo root so the
 relative `pure/` paths resolve.
 
 ## The programs
