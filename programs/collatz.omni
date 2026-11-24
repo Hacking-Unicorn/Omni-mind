@@ -1,0 +1,68 @@
+// ==============================================================================
+// COLLATZ — the Collatz sequence analyzer in Pure Omni
+// ==============================================================================
+//
+// The Collatz conjecture: start from any positive integer n. If n is even,
+// halve it; if n is odd, replace it with 3n+1. Repeat. The conjecture says
+// you always reach 1. This program counts how many steps that takes, and
+// tracks the highest value reached along the way.
+//
+//   main(n, max_steps) -> steps * 100000 + peak
+//
+//   steps : how many Collatz steps it took to reach 1 (capped at
+//           max_steps; if the cap hits first, the count stops there).
+//   peak  : the highest value reached during the sequence, clamped to
+//           99999 for the packing. The caller splits the answer with
+//           / and %.
+//
+// This is the most advanced program in the series so far: it uses a
+// `while` loop, a helper function, integer division, egate, std_trit_mux,
+// imax, and std_clamp, all together. The loop condition encodes a
+// conjunction without a boolean AND: (cur - 1) * (budget - steps) is
+// nonzero exactly when cur != 1 AND steps < budget, so the loop stops
+// when either the sequence reaches 1 or the step budget runs out.
+//
+// Examples (run with: omnic run collatz.omni <n> <max_steps>):
+//   main(6, 100)  -> 800016    (8 steps, peak 16)
+//   main(1, 100)  -> 1         (already 1, 0 steps, peak 1)
+//   main(27, 200) -> 11109232  (111 steps, peak 9232)
+//   main(10, 3)   -> 300016    (budget cap: 3 steps, peak 16)
+//   main(7, 100)  -> 1600052   (16 steps, peak 52)
+// ==============================================================================
+
+include "std/math.omni";
+include "std/trit.omni";
+
+#[strict]
+#[cap(AI)]
+#[step_budget(100000)]
+#[mem_budget(8192)]
+fn collatz_step(n: i64) -> i64 {
+    // Remainder of n / 2, computed without % (0 = even, 1 = odd).
+    let r: i64 = n - (n / 2) * 2;
+    let g: trit = egate(r);
+    // g is 0 when n is even, +1 when n is odd. Map: even -> n/2,
+    // odd -> 3n+1. (The -1 case never happens; it maps to 0.)
+    return std_trit_mux(g, 0, n / 2, 3 * n + 1);
+}
+
+#[strict]
+#[cap(AI)]
+#[step_budget(100000)]
+#[mem_budget(8192)]
+fn main(n: i64, max_steps: i64) -> i64 {
+    let cur: i64 = imax(n, 1);
+    let budget: i64 = std_clamp(max_steps, 1, 1000);
+    let steps: i64 = 0;
+    let peak: i64 = cur;
+    // Loop while cur != 1 AND steps < budget. The product is nonzero
+    // exactly when both factors are nonzero.
+    while (cur - 1) * (budget - steps) <=> 0 {
+        cur = collatz_step(cur);
+        steps += 1;
+        peak = imax(peak, cur);
+    }
+    // Pack steps and peak into one i64.
+    let p: i64 = imin(peak, 99999);
+    return steps * 100000 + p;
+}

@@ -1,0 +1,46 @@
+// ==============================================================================
+// THERMOSTAT — a thermostat controller in Pure Omni
+// ==============================================================================
+//
+// Given the current temperature and the target, decide what the heater /
+// cooler should do, and pack the answer into one i64.
+//
+//   main(current, target) -> action * 100 + magnitude
+//
+//   action    : 0 = off (already at target), 1 = heat (too cold),
+//               2 = cool (too hot). Decided by egate on the clamped diff.
+//   magnitude : how far off target, 0..10 degrees.
+//
+// The difference is clamped to [-10, 10] so a wild sensor reading cannot
+// produce a wild output. Uses the builtins the M3 fix unblocked:
+// std_clamp, egate, std_trit_mux, iabs.
+//
+// Examples (run with: omnic run thermostat.omni <current> <target>):
+//   main(20, 22) -> 102   (2 cold, heat)
+//   main(22, 22) -> 0     (at target, off)
+//   main(25, 22) -> 203   (3 hot, cool)
+//   main(10, 22) -> 110   (12 cold, clamped to 10, heat)
+//   main(35, 22) -> 210   (13 hot, clamped to 10, cool)
+//   main(22, 20) -> 202   (2 hot, cool)
+// ==============================================================================
+
+include "std/math.omni";
+include "std/trit.omni";
+
+#[strict]
+#[cap(AI)]
+#[step_budget(24000)]
+#[mem_budget(8192)]
+fn main(current: i64, target: i64) -> i64 {
+    // Clamp the difference so a wild sensor reading cannot produce a
+    // wild output. (Before the M3 builtins fix, std_clamp rejected
+    // on the `run` file path with M3_CODE_9.)
+    let diff: i64 = std_clamp(current - target, -10, 10);
+    // egate returns -1, 0, or +1 for the sign of the difference.
+    let g: trit = egate(diff);
+    // Map the gate to an action: -1 (too cold) -> heat (1),
+    // 0 (on target) -> off (0), +1 (too hot) -> cool (2).
+    let action: i64 = std_trit_mux(g, 1, 0, 2);
+    let mag: i64 = iabs(diff);
+    return action * 100 + mag;
+}

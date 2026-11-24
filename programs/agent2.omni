@@ -1,0 +1,118 @@
+// ==============================================================================
+// AGENT2 — a deeper autonomous agent in Pure Omni
+// ==============================================================================
+//
+// The agent, expanded. The classifier is now a deeper neural network —
+// two hidden layers instead of one — and the report now includes the raw
+// evidence score, so the caller can see not just the verdict but how
+// strong it was. Six functions, ~165 lines.
+//
+//   main(temp, vib, pres) ->
+//     mode*10000000 + (y+1)*1000000 + (score+5)*20000 + (control+100)*100 + spread
+//
+//   temp, vib, pres : three sensor readings, each clamped to [-10, 10].
+//   mode    : 0 = normal, 1 = caution, 2 = emergency.
+//   y       : +1 = fault, -1 = healthy, 0 = borderline. Packed as y+1.
+//   score   : the MLP evidence, -5..23. Packed as score+5 (0..28).
+//   control : the control output, -99..99. Packed as control+100.
+//   spread  : max - min of the readings, 0..20.
+//
+// The deeper network:
+//   Layer 1 (3 neurons): a0 = ReLU(t+v-8), a1 = ReLU(v+p-8),
+//                        a2 = ReLU(t+p-8).
+//   Layer 2 (2 neurons): b0 = ReLU(a0+a1-10), b1 = ReLU(a1+a2-10).
+//   Output: score = b0 + b1 - 5, y = sign(score).
+//
+// The second layer is what depth buys: it combines the first layer's
+// detectors, so a fault needs two weak signals to agree, not just one
+// strong one. The (8, 8, 8) case shows it — the shallow network in
+// agent.omni scores it 11, the deep network scores it 7, because the
+// second layer demands more agreement before it fires hard.
+//
+// The rest is the same agent: sense the spread, decide the mode,
+// drive the temperature toward 0 with one PID step (scaled by mode),
+// and report everything packed into one i64.
+//
+// Examples (run with: omnic run agent2.omni <temp> <vib> <pres>):
+//   main(10, 10, 10) -> 22560100  (fault, emergency, score 23, control -99)
+//   main(0, 0, 0)    -> 10000     (healthy, normal, score -5, control 0)
+//   main(10, 0, 0)   -> 7010      (healthy, normal, score -5, control -30)
+//   main(5, 5, 5)    -> 8500      (healthy, normal, score -5, control -15)
+//   main(10, -10, 0) -> 10008520  (healthy, spread 20, caution, score -5,
+//                                  control -15 at half strength)
+//   main(-8, 0, 0)   -> 12408     (healthy, normal, score -5, control +24)
+//   main(8, 8, 8)    -> 22240100  (fault, emergency, score 7, control -99)
+// ==============================================================================
+
+include "std/math.omni";
+include "std/trit.omni";
+
+// One ReLU neuron: ReLU(a + b + bias).
+#[strict]
+#[cap(AI)]
+#[step_budget(100000)]
+#[mem_budget(8192)]
+fn neuron(a: i64, b: i64, bias: i64) -> i64 {
+    return imax(a + b + bias, 0);
+}
+
+// The deeper MLP classifier score. Two hidden layers: three detectors
+// in layer 1, two combiners in layer 2, then the evidence threshold.
+#[strict]
+#[cap(AI)]
+#[step_budget(100000)]
+#[mem_budget(8192)]
+fn classify_score(x0: i64, x1: i64, x2: i64) -> i64 {
+    let a0: i64 = neuron(x0, x1, -8);
+    let a1: i64 = neuron(x1, x2, -8);
+    let a2: i64 = neuron(x0, x2, -8);
+    let b0: i64 = neuron(a0, a1, -10);
+    let b1: i64 = neuron(a1, a2, -10);
+    return b0 + b1 - 5;
+}
+
+// One PID step: P + I + D with output saturation. Gains Kp=Ki=Kd=1.
+#[strict]
+#[cap(AI)]
+#[step_budget(100000)]
+#[mem_budget(8192)]
+fn pid_output(err: i64, prev_err: i64, integ: i64) -> i64 {
+    let out: i64 = std_clamp(err + integ + (err - prev_err), -99, 99);
+    return out;
+}
+
+// The spread of three readings: max - min.
+#[strict]
+#[cap(AI)]
+#[step_budget(100000)]
+#[mem_budget(8192)]
+fn spread_of(a: i64, b: i64, c: i64) -> i64 {
+    let hi: i64 = imax(imax(a, b), c);
+    let lo: i64 = imin(imin(a, b), c);
+    return hi - lo;
+}
+
+#[strict]
+#[cap(AI)]
+#[step_budget(100000)]
+#[mem_budget(8192)]
+fn main(temp: i64, vib: i64, pres: i64) -> i64 {
+    let t: i64 = std_clamp(temp, -10, 10);
+    let v: i64 = std_clamp(vib, -10, 10);
+    let p: i64 = std_clamp(pres, -10, 10);
+    // Stage 1: sense. How much do the sensors disagree?
+    let spread: i64 = spread_of(t, v, p);
+    // Stage 2: classify with the deeper network.
+    let score: i64 = classify_score(t, v, p);
+    let y: trit = egate(score);
+    // Stage 3: decide the mode.
+    let mode: i64 = if_pos y { 2 } else { if_pos (spread - 12) { 1 } else { 0 } };
+    // Stage 4: control. Drive the temperature toward 0 with one PID
+    // step, scaled by mode.
+    let err: i64 = 0 - t;
+    let integ: i64 = std_clamp(err, -10, 10);
+    let out_pid: i64 = pid_output(err, 0, integ);
+    let control: i64 = if_pos (mode - 1) { -99 } else { if_pos mode { out_pid / 2 } else { out_pid } };
+    // Stage 5: report. Pack mode, health, score, control, spread.
+    return mode * 10000000 + (y + 1) * 1000000 + (score + 5) * 20000 + (control + 100) * 100 + spread;
+}

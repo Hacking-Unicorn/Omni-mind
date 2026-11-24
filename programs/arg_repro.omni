@@ -1,0 +1,11 @@
+// Minimal repro: does `run` deliver the 4th and 5th arguments?
+// main(a, b, c, d, e) returns d * 100 + e, so the result directly shows
+// what d and e arrived as.
+
+#[strict]
+#[cap(AI)]
+#[step_budget(24000)]
+#[mem_budget(8192)]
+fn main(a: i64, b: i64, c: i64, d: i64, e: i64) -> i64 {
+    return d * 100 + e;
+}

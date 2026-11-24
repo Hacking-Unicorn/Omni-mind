@@ -1,0 +1,45 @@
+// ==============================================================================
+// RUNNING STATS — max and min of three readings in Pure Omni
+// ==============================================================================
+//
+// Given three sensor readings, return the max and the min packed into one
+// i64. A tiny sensor-fusion building block: the range (max - min) tells
+// you how much the readings disagree, and the max tells you the worst case.
+//
+//   main(a, b, c) -> (max + 50) * 100 + (min + 50)
+//
+// Inputs are clamped to [-50, 49] so the packing stays unambiguous: the
+// top two digits are max + 50, the bottom two are min + 50. The caller
+// splits them with / and % and subtracts 50 back.
+//
+// NOTE: this takes three readings, not four. A four-reading version needs
+// a fourth argument, and `run` currently drops every argument past the
+// third (they arrive as 0) — a real toolchain bug found while writing
+// this program, reported separately. Once that is fixed, extend this to
+// four readings.
+//
+// Examples (run with: omnic run running_stats.omni <a> <b> <c>):
+//   main(3, 7, 2)     -> 5752  (max 7, min 2)
+//   main(5, 5, 5)     -> 5555  (max 5, min 5)
+//   main(-3, 0, 4)    -> 5447  (max 4, min -3)
+//   main(100, -100, 0) -> 9900 (clamped to 49 and -50)
+//   main(0, 0, 0)     -> 5050  (max 0, min 0)
+// ==============================================================================
+
+include "std/math.omni";
+
+#[strict]
+#[cap(AI)]
+#[step_budget(24000)]
+#[mem_budget(8192)]
+fn main(a: i64, b: i64, c: i64) -> i64 {
+    // Clamp the inputs so the packing cannot go ambiguous.
+    let x0: i64 = std_clamp(a, -50, 49);
+    let x1: i64 = std_clamp(b, -50, 49);
+    let x2: i64 = std_clamp(c, -50, 49);
+    // Nested imax / imin: the max and the min of all three.
+    let hi: i64 = imax(imax(x0, x1), x2);
+    let lo: i64 = imin(imin(x0, x1), x2);
+    // Pack: top two digits are max + 50, bottom two are min + 50.
+    return (hi + 50) * 100 + (lo + 50);
+}

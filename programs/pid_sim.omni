@@ -1,0 +1,87 @@
+// ==============================================================================
+// PID SIM — a PID-controlled system simulation in Pure Omni
+// ==============================================================================
+//
+// A complete closed-loop control system: a PID controller driving a
+// first-order plant toward a target, simulated step by step. This is the
+// same controller that runs real robots, drones, thermostats, and
+// industrial processes — a proportional term for the present error, an
+// integral term for accumulated past error, and a derivative term for
+// the rate of change.
+//
+//   main(target, start, steps) -> (cur + 100) * 400 + (err + 200)
+//
+//   target : where the system should end up.
+//   start  : where it begins.
+//   steps  : how many control steps to simulate (1..20).
+//
+//   cur : the final value after `steps` control steps.
+//   err : the final error (target - cur). The caller splits the answer
+//         with / and %.
+//
+// The controller (gains Kp=1, Ki=1, Kd=1):
+//   integ = clamp(integ + err, -10, 10)   // integral, with anti-windup
+//   out   = clamp(err + integ + (err - prev_err), -99, 99)  // P + I + D,
+//                                            // with output saturation
+//   cur  += out / 4                        // the plant: first-order,
+//                                            // gain 1/4
+//
+// Anti-windup matters: without the integral clamp, a large sustained
+// error would wind the integral up until the controller overshoots badly.
+// Saturation matters: without the output clamp, a huge error would
+// command an impossible output. Both are real control-systems practice,
+// not decoration.
+//
+// Examples (run with: omnic run pid_sim.omni <target> <start> <steps>):
+//   main(16, 0, 4) -> 46600  (converges exactly to 16 in 4 steps)
+//   main(0, 0, 5)  -> 40200  (already there, stays put)
+//   main(10, 0, 3) -> 44200  (converges exactly to 10 in 3 steps)
+//   main(20, 0, 5) -> 48599  (ends at 21, 1 past target — the integral
+//                              term overshoots slightly, which is real
+//                              PID behavior)
+//   main(10, 5, 2) -> 43801  (starts halfway there, ends at 9)
+// ==============================================================================
+
+include "std/math.omni";
+include "std/trit.omni";
+
+#[strict]
+#[cap(AI)]
+#[step_budget(100000)]
+#[mem_budget(8192)]
+fn pid_output(err: i64, prev_err: i64, integ: i64) -> i64 {
+    // P = err (Kp=1), I = integ (Ki=1), D = err - prev_err (Kd=1).
+    // Output saturation: clamp to [-99, 99].
+    let out: i64 = std_clamp(err + integ + (err - prev_err), -99, 99);
+    return out;
+}
+
+#[strict]
+#[cap(AI)]
+#[step_budget(100000)]
+#[mem_budget(8192)]
+fn main(target: i64, start: i64, steps: i64) -> i64 {
+    let tgt: i64 = std_clamp(target, -50, 50);
+    let cur: i64 = std_clamp(start, -50, 50);
+    let budget: i64 = std_clamp(steps, 1, 20);
+    let prev_err: i64 = 0;
+    let integ: i64 = 0;
+    let n: i64 = 0;
+    // Simulate `budget` control steps.
+    while (budget - n) <=> 0 {
+        let err: i64 = tgt - cur;
+        // Integral update with anti-windup: clamp to [-10, 10] so a
+        // sustained error cannot wind the integral up without bound.
+        integ = std_clamp(integ + err, -10, 10);
+        let out: i64 = pid_output(err, prev_err, integ);
+        // The plant: first-order, gain 1/4.
+        cur += out / 4;
+        prev_err = err;
+        n += 1;
+    }
+    // Pack the final value and the final error into one i64.
+    let final_err: i64 = tgt - cur;
+    let c: i64 = std_clamp(cur, -99, 99);
+    let e: i64 = std_clamp(final_err, -199, 199);
+    return (c + 100) * 400 + (e + 200);
+}

@@ -1,0 +1,129 @@
+// ==============================================================================
+// AGENT — a complete autonomous agent in Pure Omni
+// ==============================================================================
+//
+// A full sense-decide-act loop in a single program. This is not one
+// algorithm; it is a system. It reads three sensors, classifies the
+// system's health with a neural network, decides how serious the
+// situation is, computes a control action with a PID controller, and
+// reports everything packed into one number. Five functions, five
+// stages, one program.
+//
+//   main(temp, vib, pres) -> mode*1000000 + (y+1)*100000 + (control+100)*100 + spread
+//
+//   temp, vib, pres : three sensor readings (temperature, vibration,
+//                     pressure), each clamped to [-10, 10].
+//
+//   mode    : 0 = normal, 1 = caution, 2 = emergency.
+//   y       : the health classification, +1 = fault, -1 = healthy,
+//             0 = borderline. Packed as y+1 (0, 1, or 2).
+//   control : the control output, -99..99. Packed as control+100.
+//   spread  : max - min of the three readings, 0..20. A wide spread
+//             means the sensors disagree, which is itself a warning sign.
+//
+// The five stages:
+//
+//   1. SENSE — validate the readings and measure their spread. A wide
+//      spread means the sensors disagree, which is a warning even when
+//      no single reading looks bad.
+//   2. CLASSIFY — the MLP from mlp.omni: two ReLU detectors (temp+
+//      vibration, vibration+pressure) whose combined evidence decides
+//      fault vs. healthy. Reuses the `neuron` helper.
+//   3. DECIDE — pick a mode. Fault means emergency (mode 2). Otherwise,
+//      a wide spread (over 12) means caution (mode 1). Otherwise normal
+//      (mode 0).
+//   4. CONTROL — drive the temperature toward 0 with one PID step
+//      (from pid_sim.omni, via the `pid_output` helper). The mode
+//      scales it: emergency overrides to -99 (full safe shutdown),
+//      caution halves it (gentle), normal runs it at full strength.
+//   5. REPORT — pack mode, health, control, and spread into one i64.
+//      The caller splits it with / and %.
+//
+// This is the deepest program in the series: it composes the MLP, the
+// PID controller, and the sensor statistics into a single agent, and the
+// decision in stage 3 changes what stage 4 does. That coupling — the
+// classifier steering the controller — is what makes it a system rather
+// than a bag of functions.
+//
+// Examples (run with: omnic run agent.omni <temp> <vib> <pres>):
+//   main(10, 10, 10)  -> 2200100  (fault, emergency, control -99)
+//   main(0, 0, 0)     -> 10000    (healthy, normal, control 0)
+//   main(10, 0, 0)    -> 7010     (healthy, normal, control -30)
+//   main(5, 5, 5)     -> 8500     (healthy, normal, control -15)
+//   main(10, -10, 0)  -> 1008520  (healthy but spread 20, caution,
+//                                  control -15 at half strength)
+//   main(-8, 0, 0)    -> 12408    (healthy, normal, control +24, heat)
+// ==============================================================================
+
+include "std/math.omni";
+include "std/trit.omni";
+
+// One ReLU neuron: ReLU(a + b + bias).
+#[strict]
+#[cap(AI)]
+#[step_budget(100000)]
+#[mem_budget(8192)]
+fn neuron(a: i64, b: i64, bias: i64) -> i64 {
+    return imax(a + b + bias, 0);
+}
+
+// The MLP classifier score: two ReLU detectors, combined evidence
+// minus a threshold. Positive means fault, negative means healthy.
+#[strict]
+#[cap(AI)]
+#[step_budget(100000)]
+#[mem_budget(8192)]
+fn classify_score(x0: i64, x1: i64, x2: i64) -> i64 {
+    let h0: i64 = neuron(x0, x1, -8);
+    let h1: i64 = neuron(x1, x2, -8);
+    return h0 + h1 - 5;
+}
+
+// One PID step: P + I + D with output saturation. Gains Kp=Ki=Kd=1.
+#[strict]
+#[cap(AI)]
+#[step_budget(100000)]
+#[mem_budget(8192)]
+fn pid_output(err: i64, prev_err: i64, integ: i64) -> i64 {
+    let out: i64 = std_clamp(err + integ + (err - prev_err), -99, 99);
+    return out;
+}
+
+// The spread of three readings: max - min. A wide spread means the
+// sensors disagree.
+#[strict]
+#[cap(AI)]
+#[step_budget(100000)]
+#[mem_budget(8192)]
+fn spread_of(a: i64, b: i64, c: i64) -> i64 {
+    let hi: i64 = imax(imax(a, b), c);
+    let lo: i64 = imin(imin(a, b), c);
+    return hi - lo;
+}
+
+#[strict]
+#[cap(AI)]
+#[step_budget(100000)]
+#[mem_budget(8192)]
+fn main(temp: i64, vib: i64, pres: i64) -> i64 {
+    let t: i64 = std_clamp(temp, -10, 10);
+    let v: i64 = std_clamp(vib, -10, 10);
+    let p: i64 = std_clamp(pres, -10, 10);
+    // Stage 1: sense. How much do the sensors disagree?
+    let spread: i64 = spread_of(t, v, p);
+    // Stage 2: classify. Fault (+1) or healthy (-1)?
+    let score: i64 = classify_score(t, v, p);
+    let y: trit = egate(score);
+    // Stage 3: decide the mode. Fault means emergency. Otherwise a
+    // wide spread means caution. Otherwise normal.
+    let mode: i64 = if_pos y { 2 } else { if_pos (spread - 12) { 1 } else { 0 } };
+    // Stage 4: control. Drive the temperature toward 0 with one PID
+    // step. The mode scales it: emergency overrides to full safe
+    // shutdown (-99), caution halves it, normal runs it at full strength.
+    let err: i64 = 0 - t;
+    let integ: i64 = std_clamp(err, -10, 10);
+    let out_pid: i64 = pid_output(err, 0, integ);
+    let control: i64 = if_pos (mode - 1) { -99 } else { if_pos mode { out_pid / 2 } else { out_pid } };
+    // Stage 5: report. Pack mode, health, control, and spread.
+    return mode * 1000000 + (y + 1) * 100000 + (control + 100) * 100 + spread;
+}
