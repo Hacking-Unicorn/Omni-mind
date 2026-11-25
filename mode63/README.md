@@ -122,27 +122,171 @@ Run: `python3 tuner.py --seed 1 --max-evals 300` (omnic at
 - **The tuner is host-side.** In-Omni tuning (the tuner itself as an Omni
   program) is a later step, not this test.
 
+## Phase 2 follow-up — 3-neuron topology (`mlp3_tuned.omni`) + tuner hardening
+
+Phase 2 proved the tuner could hit the 2-neuron global optimum (`1` error),
+but `1` error was a topology ceiling (`(9,0,9)` unseparable) and the tuner was
+seed-sensitive (`3/5` in 300 evals, `5/8` in 1000). This follow-up fixes both:
+adds the missing third hidden neuron (`h2 = ReLU(x0 + x2 + b2)`) in a new
+proposal file `mlp3_tuned.omni` (leaving `programs/mlp.omni` and
+`mode63/mlp_tuned.omni` untouched), and hardens `tuner.py` so it reaches `0`
+errors reliably across seeds.
+
+### 4-D topology & exhaustive answer key
+
+- **Topology:** `h0 = ReLU(x0+x1+b0)`, `h1 = ReLU(x1+x2+b1)`,
+  `h2 = ReLU(x0+x2+b2)`, `score = h0 + h1 + h2 + t`, `y = sign(score)`.
+- **Parameter vector:** `theta = (b0, b1, b2, t)` with `b0, b1, b2` in
+  `[-16, 0]` and `t` in `[-12, 0]` (`63,869` points in the search box).
+- **Exhaustive answer key** (vectorized over `[-20, 5]^4`, `456,976` points,
+  simulated from the exact program arithmetic; cross-checked `18/18` against
+  `omnic run` before tuning):
+  - Baseline `(-8, -8, -8, -5)`: **3 errors** (uncapped margin `143`,
+    capped-2 margin `27`).
+  - **Global optimum: 0 errors.** Exactly **14** points reach `0` errors in
+    `[-20, 5]^4`, and all 14 lie inside `[-16, 0]^3 x [-12, 0]` (`0.022%` of
+    the search box, 1 in 4,562 points):
+    - `(-12, -14, -14, -3)` (uncapped margin `74`, capped-2 margin `32`)
+    - `(-13, -14, -14, -2)` (uncapped `70`, capped-2 `34`)
+    - `(-14, -14, -14, -1)` (uncapped `66`, capped-2 `27`)
+    - `(-13, -14, -15, -2)` (uncapped `66`, capped-2 `33`)
+    - `(-13, -15, -14, -2)` (uncapped `65`, capped-2 `33`)
+    - `(-14, -14, -15, -1)` (uncapped `62`, capped-2 `27`)
+    - `(-14, -15, -14, -1)` (uncapped `61`, capped-2 `27`)
+    - `(-13, -15, -15, -2)` (uncapped `61`, capped-2 `32`)
+    - `(-14, -14, -16, -1)` (uncapped `58`, capped-2 `26`)
+    - `(-14, -15, -15, -1)` (uncapped `57`, capped-2 `26`)
+    - `(-14, -16, -14, -1)` (uncapped `56`, capped-2 `26`)
+    - `(-14, -15, -16, -1)` (uncapped `53`, capped-2 `25`)
+    - `(-14, -16, -15, -1)` (uncapped `52`, capped-2 `25`)
+    - `(-14, -16, -16, -1)` (uncapped `48`, capped-2 `24`)
+  - **Adjacency:** in `[-20, 5]^4`, `51 / 392` (`13.0%`) 1-error points are
+    L1-adjacent to a 0-error point (`789 / 9,270` = `8.5%` 2-error adjacent to
+    1-error). Inside the search box `[-16, 0]^3 x [-12, 0]`, `45 / 312`
+    (`14.4%`) 1-error points are L1-adjacent to a 0-error point (`537 / 3,922`
+    = `13.7%` 2-error adjacent to 1-error).
+  - **Why uncapped margin failed in 4-D:** at 0-error optima, total uncapped
+    margin is `48..74` (median `61`), whereas 1-error points reach `127` and
+    2-error points reach `155`. The top-20 1-error points by uncapped margin
+    sit at mean L1 distance **`21.75`** from the 0-error cluster (`0/20`
+    L1-adjacent), pulling every climb away from the 0-error region.
+
+### Tuner hardening changes (`tuner.py`)
+
+The method stays **(1+1)-CMA-ES with Margin**, with the dataset, ground-truth
+rule, and lexicographic `(errors, -margin)` ordering unchanged:
+
+1. **Warm-start `16 -> 32`** Latin Hypercube points to cover the 4-D box.
+2. **Independent local restarts (`restart_after = 30`):**
+   - Margin improvements still do **not** reset the stagnation counter — only
+     a lower error count does.
+   - Each restart gets its own derived RNG sub-seed (fixing a Phase 2 bug
+     where every restart passed the same `seed`, replaying identical Gaussian
+     steps) and its own local `parent_fit` (so restarts from higher-error warm
+     points can actually climb instead of being compared against the global
+     best), while global `best_fit` / `best_theta` are always preserved.
+   - Restarts alternate between `best_theta` (fresh covariance, alternating
+     `sigma0` and `1.5*sigma0`) and the next-best unused warm / uniform point.
+3. **Per-case margin cap (`margin_cap = 2`):**
+   - Each correctly classified case contributes `min(|score|, 2)` to the
+     tiebreaker (`--margin-cap 0` disables the cap).
+   - **Why `cap = 2` (from the data, not tuned to seed 1):** across the 14
+     zero-error optima, per-case `|score|` has median `1..3` (overall median
+     `2`), while easy cases `(10,10,10)` reach `13..17` and high-margin
+     1-error traps reach `|score| > 20`. Capping at `2` drops the top-20
+     1-error points' mean L1 distance to the 0-error cluster from `21.75`
+     (`cap=None`) → `8.75` (`cap=4`) → `5.30` (`cap=3`) → **`4.20` (`cap=2`,
+     `2/20` L1-adjacent)**, while still preferring non-borderline (`|score| >= 2`)
+     classifications over `|score| = 1` (unlike `cap=1`, which degenerates to
+     constant `18 - errors`).
+4. **Hamano's `1/N` margin probability (`alpha = 1 / max(4, n)` = `0.25` in
+   4-D):** with the old `alpha = 0.1`, `(1 - 0.1)^4 = 65.6%` of steps at low
+   `sigma` were no-ops rounding back to `round(m)`.
+
+### Measured reliability (10-seed simulation + 5-seed `omnic`, `--max-evals 1000`)
+
+Ablation on 4-D `mlp3` in simulation (`--max-evals 1000`):
+
+| Configuration | Seeds `1..10` (0 err) | Holdout `11..20` | Combined `1..30` |
+|---|---:|---:|---:|
+| Old tuner defaults (`w=16, r=50, cap=None`) | `0/10` | `0/10` | — |
+| Hardened restarts + `w=32` + `alpha=0.25`, **uncapped (`--margin-cap 0`)** | `0/10` | `1/10` | `2/30` |
+| Hardened restarts + `w=32` + `alpha=0.25`, **`--margin-cap 3`** | `6/10` | — | `13/30` |
+| **Hardened tuner (`w=32, r=30, alpha=0.25, --margin-cap 2`)** | **`8/10`** | **`9/10`** | **`25/30` (83.3%)** |
+
+Per-seed simulation (`seeds 1..10`, `--margin-cap 2`, `--max-evals 1000`):
+- **8/10 PASS** (median `390` evals): seed 1 (`561`, `(-14,-14,-16,-1)`),
+  seed 2 (`54`, `(-12,-14,-14,-3)`), seed 3 (`298`, `(-12,-14,-14,-3)`),
+  seed 4 (`493`, `(-13,-14,-14,-2)`), seed 5 (`97`, `(-12,-14,-14,-3)`),
+  seed 6 (`421`, `(-13,-15,-15,-2)`), seed 7 (`845`, `(-14,-14,-14,-1)`),
+  seed 8 (FAIL, 1 err at `(-5,-12,-12,-8)`), seed 9 (FAIL, 1 err at
+  `(-3,-12,-12,-10)`), seed 10 (`359`, `(-13,-14,-15,-2)`).
+- Comparison against old 2-neuron baseline: `5/8` (`62.5%`) reached the old
+  1-error ceiling in 1000 evals; on the harder 26x-larger 4-D space, the
+  hardened tuner reaches **0 errors** on `8/10` (`80%`, `25/30` = `83.3%`).
+
+Live `omnic` runs on Linux (WSL2, `OMNIC=$HOME/workspace/omnic-main` built
+from `omni` `main @ d5789de`, `OMNI_DIR=$HOME/workspace/omni-main`):
+- **Perceptron 1-D sanity check (`--seed 1`): PASS** (`w=84`, `0` errors in
+  `8` evals).
+- **MLP3 4-D via `omnic` (`seeds 1..5`, `--max-evals 1000`): 5/5 PASS** (all
+  reach `0` errors, matching simulation eval-for-eval):
+  - Seed 1: `(-14, -14, -16, -1)` — `0` errors, capped margin `26` in `561` evals (`519` unique, `12` restarts)
+  - Seed 2: `(-12, -14, -14, -3)` — `0` errors, capped margin `32` in `54` evals (`54` unique, `0` restarts)
+  - Seed 3: `(-12, -14, -14, -3)` — `0` errors, capped margin `32` in `298` evals (`266` unique, `7` restarts)
+  - Seed 4: `(-13, -14, -14, -2)` — `0` errors, capped margin `34` in `493` evals (`435` unique, `13` restarts)
+  - Seed 5: `(-12, -14, -14, -3)` — `0` errors, capped margin `32` in `97` evals (`95` unique, `1` restart)
+
+### Proposal file (`mode63/mlp3_tuned.omni`) & 3-way verification
+
+Recorded proposal: `mode63/mlp3_tuned.omni` with **`theta = (-12, -14, -14, -3)`**
+(found by 3 of 5 live `omnic` seeds and highest uncapped margin `74` among all
+14 zero-error optima). Verified across all 18 cases **three ways** (`omnic run`,
+`omnic run-wasm`, `omnic run --rust`) with **18/18 exact agreement and 0 errors**.
+
+Documented 5 goldens (all 5 classifications unchanged):
+- `(10, 10, 10)` -> `467` (`y=+1`, `score=+17`; was `459` on 2-neuron tuned, `469` on untuned) — `run=Int(467)`, `run-wasm=467`, `--rust=Int(467)`
+- `(0, 0, 0)` -> `47` (`y=-1`, `score=-3`; was `49` / `45`) — `run=Int(47)`, `run-wasm=47`, `--rust=Int(47)`
+- `(10, 0, 0)` -> `47` (`y=-1`, `score=-3`; was `49` / `47`) — `run=Int(47)`, `run-wasm=47`, `--rust=Int(47)`
+- `(5, 5, 5)` -> `47` (`y=-1`, `score=-3`; was `49` / `49`) — `run=Int(47)`, `run-wasm=47`, `--rust=Int(47)`
+- `(8, 8, 8)` -> `455` (`y=+1`, `score=+5`; was `451` / `461`) — `run=Int(455)`, `run-wasm=455`, `--rust=Int(455)`
+
+### Residual limitations (honest)
+
+- **Not 10/10 across all seeds:** `2/10` seeds (`8` and `9` in `1..10`, `5/30`
+  overall) still stall at 1-error points (`(-5,-12,-12,-8)` and
+  `(-3,-12,-12,-10)`, capped-2 margin `33`) within `1000` evals because only
+  `45/312` (`14.4%`) of 1-error points in the box are L1-adjacent to the
+  14-point 0-error island.
+- **Host-side tuner:** `tuner.py` is still Python on the host; in-Omni tuning
+  and a ternary-native optimizer remain Phase 7 work.
+- **Small benchmark:** 4 integer parameters, 18 cases; scaling to deeper nets
+  (`agent2.omni`) is future work.
+
 ## Adoption
 
-`mlp_tuned.omni` is a **separate file / proposal**, not an edit to
-`mlp.omni` on main. `mlp.omni` on main does not change in this test.
+`mlp_tuned.omni` (2-neuron Phase 2 history) and `mlp3_tuned.omni` (3-neuron
+0-error proposal) are **separate proposal files**, not edits to `mlp.omni` on
+main. `programs/mlp.omni` and `mode63/mlp_tuned.omni` remain untouched.
 Adoption goes through the `learn` verdict (ADOPT / HOLD / REJECT) per
 FOUNDATION.md — the tuner proposes, the Mind decides.
 
 ## Next steps
 
+- Phase 3 — `distill` for real (Stitch anti-unification + ΔMDL / soundness admission gate).
 - `agent2.omni` (more parameters, deeper net).
-- The structural proposer step: adding the third neuron (`ReLU(x0+x2+b2)`)
-  via CEGIS, per PAPER.md §6.1 — the fix for the (9,0,9) ceiling.
-- A ternary-native optimizer (first-principles revisit of the tuner).
+- A ternary-native optimizer (Phase 7 first-principles revisit of the tuner).
 
 ## Reproduce
 
 ```sh
 cd mode63
-python3 tuner.py --seed 1 --max-evals 300        # full run (omnic)
-python3 tuner.py --simulate --seed 1             # fast, simulation only
+export OMNIC=$HOME/workspace/omnic-main
+export OMNI_DIR=$HOME/workspace/omni-main
+python3 tuner.py --seed 1 --max-evals 1000        # full run (omnic)
+python3 tuner.py --simulate --seed 1              # fast, simulation only
+python3 tuner.py --simulate --seed 1 --margin-cap 0  # uncapped ablation
 ```
 
-Environment: `OMNIC` (default `~/workspace/omnic-fix`), `OMNI_DIR`
-(default `~/workspace/omni-fix-m3builtins`, must contain `pure/`).
+Environment: `OMNIC` (default `$HOME/workspace/omnic-main`), `OMNI_DIR`
+(default `$HOME/workspace/omni-main`, must contain `pure/`).
